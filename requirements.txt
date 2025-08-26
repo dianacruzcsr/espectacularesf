@@ -1,0 +1,6 @@
+streamlit
+pandas
+geopy
+openpyxl
+python-pptx
+folium
