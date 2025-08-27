@@ -221,16 +221,36 @@ if uploaded_file:
     else:
         st.session_state.uploaded_df["TARIFA"] = (st.session_state.uploaded_df["TARIFA PUBLICO"].astype(str).str.replace(r"[^\d.]", "", regex=True).replace("", "0").astype(float))
 
+
 # 2. INPUTS PARA LA BÚSQUEDA
 st.write("---")
 st.header("🎯 **Paso 2: Define tus criterios de búsqueda**")
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.session_state.negocio_lat = st.number_input("🧭 Latitud del negocio:", value=st.session_state.negocio_lat, format="%.6f", key='negocio_lat_input')
+    # Usar un text_input para permitir valores vacíos
+    lat_input = st.text_input("🧭 Latitud del negocio:", value=str(st.session_state.negocio_lat), key='negocio_lat_text_input')
+    try:
+        # Convertir a float si la entrada no está vacía
+        st.session_state.negocio_lat = float(lat_input) if lat_input.strip() != "" else 19.4326
+    except ValueError:
+        st.warning("⚠️ Formato de latitud incorrecto. Usando valor predeterminado.")
+        st.session_state.negocio_lat = 19.4326 # Valor predeterminado de respaldo
+
     st.session_state.presupuesto_min = st.number_input("💰 Presupuesto mínimo:", value=st.session_state.presupuesto_min, format="%.2f", key='presupuesto_min_input')
+
 with col2:
-    st.session_state.negocio_lon = st.number_input("🧭 Longitud del negocio:", value=st.session_state.negocio_lon, format="%.6f", key='negocio_lon_input')
+    # Usar un text_input para permitir valores vacíos
+    lon_input = st.text_input("🧭 Longitud del negocio:", value=str(st.session_state.negocio_lon), key='negocio_lon_text_input')
+    try:
+        # Convertir a float si la entrada no está vacía
+        st.session_state.negocio_lon = float(lon_input) if lon_input.strip() != "" else -99.1332
+    except ValueError:
+        st.warning("⚠️ Formato de longitud incorrecto. Usando valor predeterminado.")
+        st.session_state.negocio_lon = -99.1332 # Valor predeterminado de respaldo
+    
     st.session_state.presupuesto_max = st.number_input("💰 Presupuesto máximo:", value=st.session_state.presupuesto_max, format="%.2f", key='presupuesto_max_input')
+
 with col3:
     st.session_state.radio_km = st.slider("📏 Radio de búsqueda (km):", min_value=0.5, max_value=50.0, value=st.session_state.radio_km, step=0.5, key='radio_km_input')
 
@@ -379,4 +399,5 @@ if not st.session_state.df_filtrado.empty:
             except FileNotFoundError:
                 st.error("❌ **Error:** No se encontró el archivo de plantilla `plantilla2.pptx`. Asegúrate de que está en la misma carpeta que tu `app.py`.")
             except Exception as e:
+
                 st.error(f"❌ **Error al crear la presentación:** {e}")
