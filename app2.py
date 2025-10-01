@@ -28,10 +28,15 @@ def generar_folio():
     
     # Obtener el número actual y incrementar
     numero = st.session_state.contador_descargas
-    st.session_state.contador_descargas += 1
-    
     folio = f"PROP-{hoy}-{numero:03d}"
     return folio
+
+def incrementar_folio():
+    """Incrementa el contador de folios solo cuando se realiza una descarga"""
+    if 'contador_descargas' not in st.session_state:
+        st.session_state.contador_descargas = 1
+    else:
+        st.session_state.contador_descargas += 1
 
 def analizar_formato_coordenada(coord_str):
     if pd.isna(coord_str) or coord_str == "" or str(coord_str).strip() == "":
@@ -224,6 +229,10 @@ if 'radio_km' not in st.session_state:
     st.session_state.radio_km = 5.0
 if 'contador_descargas' not in st.session_state:
     st.session_state.contador_descargas = 1
+if 'folio_actual' not in st.session_state:
+    st.session_state.folio_actual = generar_folio()
+if 'busqueda_realizada' not in st.session_state:
+    st.session_state.busqueda_realizada = False
     
 # 1. UPLOAD CSV
 uploaded_file = st.file_uploader("📂 **Paso 1: Sube tu archivo CSV de inventario**", type="csv")
@@ -245,26 +254,22 @@ st.header("🎯 **Paso 2: Define tus criterios de búsqueda**")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    # Usar un text_input para permitir valores vacíos
     lat_input = st.text_input("🧭 Latitud del negocio:", value=str(st.session_state.negocio_lat), key='negocio_lat_text_input')
     try:
-        # Convertir a float si la entrada no está vacía
         st.session_state.negocio_lat = float(lat_input) if lat_input.strip() != "" else 19.4326
     except ValueError:
-        st.warning("⚠️ Formato de latitud incorrecto. Usando valor predeterminado.")
-        st.session_state.negocio_lat = 19.4326 # Valor predeterminado de respaldo
+        st.warning("⚠️ Formato de latitud incorrecto. Usando valor predetermeterminado.")
+        st.session_state.negocio_lat = 19.4326
 
     st.session_state.presupuesto_min = st.number_input("💰 Presupuesto mínimo:", value=st.session_state.presupuesto_min, format="%.2f", key='presupuesto_min_input')
 
 with col2:
-    # Usar un text_input para permitir valores vacíos
     lon_input = st.text_input("🧭 Longitud del negocio:", value=str(st.session_state.negocio_lon), key='negocio_lon_text_input')
     try:
-        # Convertir a float si la entrada no está vacía
         st.session_state.negocio_lon = float(lon_input) if lon_input.strip() != "" else -99.1332
     except ValueError:
         st.warning("⚠️ Formato de longitud incorrecto. Usando valor predeterminado.")
-        st.session_state.negocio_lon = -99.1332 # Valor predeterminado de respaldo
+        st.session_state.negocio_lon = -99.1332
     
     st.session_state.presupuesto_max = st.number_input("💰 Presupuesto máximo:", value=st.session_state.presupuesto_max, format="%.2f", key='presupuesto_max_input')
 
@@ -302,7 +307,6 @@ if st.button("🚀 **Iniciar Búsqueda**") and st.session_state.uploaded_df is n
                 if (st.session_state.presupuesto_min is not None and tarifa_val < st.session_state.presupuesto_min) or \
                    (st.session_state.presupuesto_max is not None and tarifa_val > st.session_state.presupuesto_max): continue
                 
-                # Corrected URLs for Google Maps and Street View
                 maps_url = f"https://www.google.com/maps/place/{lat_raw},{lon_raw}"
                 street_view_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={lat_raw},{lon_raw}"
 
@@ -323,12 +327,16 @@ if st.button("🚀 **Iniciar Búsqueda**") and st.session_state.uploaded_df is n
     if not resultados:
         st.warning("⚠️ No se encontraron espectaculares que cumplan con los criterios especificados.")
         st.session_state.df_filtrado = pd.DataFrame()
+        st.session_state.busqueda_realizada = False
     else:
         st.session_state.df_filtrado = pd.DataFrame(resultados)
         st.success(f"✅ Búsqueda completada. Se encontraron **{len(resultados)}** resultados.")
+        st.session_state.busqueda_realizada = True
+        # Generar un nuevo folio solo cuando se realiza una nueva búsqueda exitosa
+        st.session_state.folio_actual = generar_folio()
 
 # 4. VISUALIZACIÓN Y DESCARGAS
-if not st.session_state.df_filtrado.empty:
+if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizada:
     df_filtrado = st.session_state.df_filtrado
     st.write("---")
     st.header("🔍 **Resultados de la Búsqueda**")
@@ -358,18 +366,22 @@ if not st.session_state.df_filtrado.empty:
     st.subheader("💾 Opciones de Descarga")
     col_dl1, col_dl2 = st.columns(2)
     
-    # Generar folio único para esta sesión de descargas
-    folio_actual = generar_folio()
-    st.info(f"📋 **Folio de esta propuesta:** `{folio_actual}`")
+    # Mostrar el folio actual sin incrementarlo
+    st.info(f"📋 **Folio de esta propuesta:** `{st.session_state.folio_actual}`")
     
     with col_dl1:
         csv_file = df_filtrado.to_csv(index=False).encode('utf-8')
-        st.download_button(
+        if st.download_button(
             label="⬇️ Descargar Resultados (CSV)", 
             data=csv_file, 
-            file_name=f"{folio_actual}_resultados.csv", 
-            mime="text/csv"
-        )
+            file_name=f"{st.session_state.folio_actual}_resultados.csv", 
+            mime="text/csv",
+            key='download_csv'  # Clave única para este botón
+        ):
+            # Solo incrementar el contador después de la descarga exitosa
+            incrementar_folio()
+            st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
+    
     with col_dl2:
         output = io.BytesIO()
         wb = Workbook()
@@ -390,12 +402,16 @@ if not st.session_state.df_filtrado.empty:
             cell.fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
             cell.font = Font(bold=True)
         wb.save(output)
-        st.download_button(
+        if st.download_button(
             label="⬇️ Descargar Resultados (Excel)", 
             data=output.getvalue(), 
-            file_name=f"{folio_actual}_resultados.xlsx", 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            file_name=f"{st.session_state.folio_actual}_resultados.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key='download_excel'  # Clave única para este botón
+        ):
+            # Solo incrementar el contador después de la descarga exitosa
+            incrementar_folio()
+            st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
     
     # 5. GENERAR PRESENTACIÓN
     st.write("---")
@@ -404,7 +420,7 @@ if not st.session_state.df_filtrado.empty:
     opciones_presentacion = [f"{i+1}. {r['CLAVE']} - {r['TARIFA_PUBLICO']}" for i, r in df_filtrado.iterrows()]
     seleccionados_presentacion = st.multiselect("Elige los espectaculares de la lista:", opciones_presentacion, placeholder="Selecciona 1 o más...")
     
-    if st.button("Crear Presentación"):
+    if st.button("Crear Presentación", key='crear_presentacion'):
         if not seleccionados_presentacion:
             st.warning("⚠️ Por favor, selecciona al menos un espectacular para crear la presentación.")
         else:
@@ -427,17 +443,20 @@ if not st.session_state.df_filtrado.empty:
                     pptx_output = io.BytesIO()
                     prs.save(pptx_output)
                     
-                    # Generar folio específico para la presentación
-                    folio_presentacion = generar_folio()
-                    st.success(f"✅ ¡Presentación creada con éxito! - Folio: `{folio_presentacion}`")
+                    st.success(f"✅ ¡Presentación creada con éxito! - Folio: `{st.session_state.folio_actual}`")
                     
-                    st.download_button(
+                    if st.download_button(
                         label="⬇️ Descargar Presentación (PPTX)", 
                         data=pptx_output.getvalue(), 
-                        file_name=f"{folio_presentacion}.pptx", 
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                    )
+                        file_name=f"{st.session_state.folio_actual}.pptx", 
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key='download_pptx'  # Clave única para este botón
+                    ):
+                        # Solo incrementar el contador después de la descarga exitosa
+                        incrementar_folio()
+                        st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
             except FileNotFoundError:
                 st.error("❌ **Error:** No se encontró el archivo de plantilla `plantilla2.pptx`. Asegúrate de que está en la misma carpeta que tu `app.py`.")
             except Exception as e:
                 st.error(f"❌ **Error al crear la presentación:** {e}")
+
