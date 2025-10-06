@@ -380,7 +380,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
         ):
             # Solo incrementar el contador después de la descarga exitosa
             incrementar_folio()
-            st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
+            st.success(f"✅ Descarga completada.")
     
     with col_dl2:
         output = io.BytesIO()
@@ -411,7 +411,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
         ):
             # Solo incrementar el contador después de la descarga exitosa
             incrementar_folio()
-            st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
+            st.success(f"✅ Descarga completada.")
     
     # 5. GENERAR PRESENTACIÓN
     st.write("---")
@@ -459,6 +459,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 st.error("❌ **Error:** No se encontró el archivo de plantilla `plantilla2.pptx`. Asegúrate de que está en la misma carpeta que tu `app.py`.")
             except Exception as e:
                 st.error(f"❌ **Error al crear la presentación:** {e}")
+
 
 
 
