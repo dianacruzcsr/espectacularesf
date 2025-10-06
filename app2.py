@@ -351,7 +351,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     for i, r in df_filtrado.iterrows():
         try:
             color_marker = colores_marcadores[i % len(colores_marcadores)]
-            popup_html = (f"<b>{r['CLAVE']}</b><br>Distancia: {r['DISTANCIA_KM']:.2f} km<br>Tarifa: {r['TARIFA_PUBLICO']}<br>"
+            popup_html = (f"<b>{r['CLAVE']}</b><b>{r['TIPO']}</b><br>Distancia: {r['DISTANCIA_KM']:.2f} km<br>Tarifa: {r['TARIFA_PUBLICO']}<br>"
                           f"<a href='{r['MAPS_']}' target='_blank'>📍 Google Maps</a><br>"
                           f"<a href='{r['STREET_VIEW']}' target='_blank'>🌐 Street View</a>")
             folium.Marker(
@@ -459,4 +459,5 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 st.error("❌ **Error:** No se encontró el archivo de plantilla `plantilla2.pptx`. Asegúrate de que está en la misma carpeta que tu `app.py`.")
             except Exception as e:
                 st.error(f"❌ **Error al crear la presentación:** {e}")
+
 
