@@ -497,3 +497,4 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
 
 
 
+
