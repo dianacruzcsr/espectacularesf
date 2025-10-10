@@ -19,16 +19,10 @@ import io
 # ================================
 
 def generar_folio():
-    """Genera un folio único con formato PROP-YYYYMMDD-XXX"""
-    hoy = datetime.now().strftime("%Y%m%d")
-    
-    # Inicializar contador en session_state si no existe
-    if 'contador_descargas' not in st.session_state:
-        st.session_state.contador_descargas = 1
-    
-    # Obtener el número actual y incrementar
-    numero = st.session_state.contador_descargas
-    folio = f"PROP-{hoy}-{numero:03d}"
+    """Genera un folio único con formato PROP-AÑO-DIA-MES-SEGUNDOS"""
+    ahora = datetime.now()
+    # Formato: PROP-AÑO-DIA-MES-SEGUNDOS (ejemplo: PROP-2025-10-07-45812)
+    folio = f"PROP-{ahora.year}-{ahora.day:02d}-{ahora.month:02d}-{ahora.second:02d}"
     return folio
 
 def incrementar_folio():
@@ -233,6 +227,8 @@ if 'folio_actual' not in st.session_state:
     st.session_state.folio_actual = generar_folio()
 if 'busqueda_realizada' not in st.session_state:
     st.session_state.busqueda_realizada = False
+if 'espectaculares_seleccionados' not in st.session_state:
+    st.session_state.espectaculares_seleccionados = []
     
 # 1. UPLOAD CSV
 uploaded_file = st.file_uploader("📂 **Paso 1: Sube tu archivo CSV de inventario**", type="csv")
@@ -334,6 +330,8 @@ if st.button("🚀 **Iniciar Búsqueda**") and st.session_state.uploaded_df is n
         st.session_state.busqueda_realizada = True
         # Generar un nuevo folio solo cuando se realiza una nueva búsqueda exitosa
         st.session_state.folio_actual = generar_folio()
+        # Reiniciar selección de espectaculares
+        st.session_state.espectaculares_seleccionados = []
 
 # 4. VISUALIZACIÓN Y DESCARGAS
 if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizada:
@@ -351,7 +349,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     for i, r in df_filtrado.iterrows():
         try:
             color_marker = colores_marcadores[i % len(colores_marcadores)]
-            popup_html = (f"<b>{r['CLAVE']}</b><br>Distancia: {r['DISTANCIA_KM']:.2f} km<br>Tarifa:{r['TARIFA_PUBLICO']}<br><br>Tipo: {r['TIPO']}<br>"
+            popup_html = (f"<b>{r['CLAVE']}</b><br>Distancia: {r['DISTANCIA_KM']:.2f} km<br>Tarifa: {r['TARIFA_PUBLICO']}<br><br>Tipo: {r['TIPO']}<br>"
                           f"<a href='{r['MAPS_']}' target='_blank'>📍 Google Maps</a><br>"
                           f"<a href='{r['STREET_VIEW']}' target='_blank'>🌐 Street View</a>")
             folium.Marker(
@@ -363,69 +361,93 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
             st.error(f"⚠️ No se pudo dibujar un marcador: {e}")
     st.components.v1.html(folium.Figure().add_child(mapa).render(), height=500)
 
-    st.subheader("💾 Opciones de Descarga")
-    col_dl1, col_dl2 = st.columns(2)
-    
-    # Mostrar el folio actual sin incrementarlo
-    st.info(f"📋 **Folio de esta propuesta:** `{st.session_state.folio_actual}`")
-    
-    with col_dl1:
-        csv_file = df_filtrado.to_csv(index=False).encode('utf-8')
-        if st.download_button(
-            label="⬇️ Descargar Resultados (CSV)", 
-            data=csv_file, 
-            file_name=f"{st.session_state.folio_actual}_resultados.csv", 
-            mime="text/csv",
-            key='download_csv'  # Clave única para este botón
-        ):
-            # Solo incrementar el contador después de la descarga exitosa
-            incrementar_folio()
-            st.success(f"✅ Descarga completada.")
-    
-    with col_dl2:
-        output = io.BytesIO()
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Lugares cercanos"
-        ws.append(list(df_filtrado.columns))
-        for r in df_filtrado.to_dict('records'):
-            ws.append(list(r.values()))
-        for row in range(2, ws.max_row + 1):
-            for col in range(1, ws.max_column + 1):
-                if ws.cell(row=1, column=col).value == "TARIFA_PUBLICO":
-                    ws.cell(row=row, column=col).number_format = '"$"#,##0.00'
-                    break
-        tabla = Table(displayName="TablaEspectaculares", ref=f"A1:{get_column_letter(ws.max_column)}{ws.max_row}")
-        tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
-        ws.add_table(tabla)
-        for cell in ws[1]:
-            cell.fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
-            cell.font = Font(bold=True)
-        wb.save(output)
-        if st.download_button(
-            label="⬇️ Descargar Resultados (Excel)", 
-            data=output.getvalue(), 
-            file_name=f"{st.session_state.folio_actual}_resultados.xlsx", 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key='download_excel'  # Clave única para este botón
-        ):
-            # Solo incrementar el contador después de la descarga exitosa
-            incrementar_folio()
-            st.success(f"✅ Descarga completada.")
-    
-    # 5. GENERAR PRESENTACIÓN
+    # 5. SELECCIÓN DE ESPECTACULARES PARA DESCARGAS
     st.write("---")
-    st.subheader("🎓 Generar Presentación")
-    st.write("Selecciona los espectaculares que deseas incluir en una presentación PowerPoint.")
-    opciones_presentacion = [f"{i+1}. {r['CLAVE']} - {r['TARIFA_PUBLICO']}" for i, r in df_filtrado.iterrows()]
-    seleccionados_presentacion = st.multiselect("Elige los espectaculares de la lista:", opciones_presentacion, placeholder="Selecciona 1 o más...")
+    st.subheader("🎯 Selección de Espectaculares")
+    st.write("Selecciona los espectaculares que deseas incluir en las descargas (CSV, Excel y Presentación).")
     
-    if st.button("Crear Presentación", key='crear_presentacion'):
-        if not seleccionados_presentacion:
-            st.warning("⚠️ Por favor, selecciona al menos un espectacular para crear la presentación.")
-        else:
-            indices_seleccionados = [int(op.split(".")[0]) - 1 for op in seleccionados_presentacion]
-            seleccionados_df = df_filtrado.iloc[indices_seleccionados]
+    opciones_espectaculares = [f"{i+1}. {r['CLAVE']} - {r['TARIFA_PUBLICO']} - {r['DISTANCIA_KM']} km" for i, r in df_filtrado.iterrows()]
+    
+    seleccionados = st.multiselect(
+        "Elige los espectaculares de la lista:", 
+        opciones_espectaculares, 
+        default=st.session_state.espectaculares_seleccionados,
+        placeholder="Selecciona 1 o más espectaculares..."
+    )
+    
+    # Actualizar la selección en session_state
+    st.session_state.espectaculares_seleccionados = seleccionados
+    
+    if seleccionados:
+        indices_seleccionados = [int(op.split(".")[0]) - 1 for op in seleccionados]
+        df_seleccionados = df_filtrado.iloc[indices_seleccionados]
+        
+        st.success(f"✅ **{len(seleccionados)}** espectaculares seleccionados")
+        
+        # Mostrar tabla de espectaculares seleccionados
+        st.subheader("📋 Espectaculares Seleccionados")
+        st.dataframe(df_seleccionados[['CLAVE', 'DIRECCION', 'TARIFA_PUBLICO', 'DISTANCIA_KM']])
+        
+        # 6. OPCIONES DE DESCARGA
+        st.write("---")
+        st.subheader("💾 Opciones de Descarga")
+        
+        # Mostrar el folio actual sin incrementarlo
+        st.info(f"📋 **Folio de esta propuesta:** `{st.session_state.folio_actual}`")
+        
+        col_dl1, col_dl2 = st.columns(2)
+        
+        with col_dl1:
+            # Descargar CSV con espectaculares seleccionados
+            csv_file = df_seleccionados.to_csv(index=False).encode('utf-8')
+            if st.download_button(
+                label="⬇️ Descargar Resultados (CSV)", 
+                data=csv_file, 
+                file_name=f"{st.session_state.folio_actual}_resultados.csv", 
+                mime="text/csv",
+                key='download_csv'
+            ):
+                # Solo incrementar el contador después de la descarga exitosa
+                incrementar_folio()
+                st.success(f"✅ Descarga completada. Nuevo folio: `{generar_folio()}`")
+        
+        with col_dl2:
+            # Descargar Excel con espectaculares seleccionados
+            output = io.BytesIO()
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Lugares cercanos"
+            ws.append(list(df_seleccionados.columns))
+            for r in df_seleccionados.to_dict('records'):
+                ws.append(list(r.values()))
+            for row in range(2, ws.max_row + 1):
+                for col in range(1, ws.max_column + 1):
+                    if ws.cell(row=1, column=col).value == "TARIFA_PUBLICO":
+                        ws.cell(row=row, column=col).number_format = '"$"#,##0.00'
+                        break
+            tabla = Table(displayName="TablaEspectaculares", ref=f"A1:{get_column_letter(ws.max_column)}{ws.max_row}")
+            tabla.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
+            ws.add_table(tabla)
+            for cell in ws[1]:
+                cell.fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+                cell.font = Font(bold=True)
+            wb.save(output)
+            if st.download_button(
+                label="⬇️ Descargar Resultados (Excel)", 
+                data=output.getvalue(), 
+                file_name=f"{st.session_state.folio_actual}_resultados.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key='download_excel'
+            ):
+                # Solo incrementar el contador después de la descarga exitosa
+                incrementar_folio()
+                st.success(f"✅ Descarga completada.")
+        
+        # 7. GENERAR PRESENTACIÓN
+        st.write("---")
+        st.subheader("🎓 Generar Presentación")
+        
+        if st.button("Crear Presentación", key='crear_presentacion'):
             try:
                 plantilla_pptx = "plantilla2.pptx"
                 prs = Presentation(plantilla_pptx)
@@ -434,12 +456,12 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 else:
                     slide_base_index = 1
                     slide_base = prs.slides[slide_base_index]
-                    for _, fila in seleccionados_df.iterrows():
+                    for _, fila in df_seleccionados.iterrows():
                         nueva_slide = duplicar_slide(prs, slide_base)
-                        reemplazar_texto_slide(nueva_slide, fila.to_dict(), seleccionados_df)
-                    if not seleccionados_df.empty:
-                        primera_fila = seleccionados_df.iloc[0]
-                        reemplazar_texto_slide(prs.slides[0], primera_fila.to_dict(), seleccionados_df)
+                        reemplazar_texto_slide(nueva_slide, fila.to_dict(), df_seleccionados)
+                    if not df_seleccionados.empty:
+                        primera_fila = df_seleccionados.iloc[0]
+                        reemplazar_texto_slide(prs.slides[0], primera_fila.to_dict(), df_seleccionados)
                     pptx_output = io.BytesIO()
                     prs.save(pptx_output)
                     
@@ -450,7 +472,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                         data=pptx_output.getvalue(), 
                         file_name=f"{st.session_state.folio_actual}.pptx", 
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key='download_pptx'  # Clave única para este botón
+                        key='download_pptx'
                     ):
                         # Solo incrementar el contador después de la descarga exitosa
                         incrementar_folio()
@@ -459,6 +481,10 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 st.error("❌ **Error:** No se encontró el archivo de plantilla `plantilla2.pptx`. Asegúrate de que está en la misma carpeta que tu `app.py`.")
             except Exception as e:
                 st.error(f"❌ **Error al crear la presentación:** {e}")
+    
+    else:
+        st.warning("⚠️ Por favor, selecciona al menos un espectacular para habilitar las opciones de descarga.")
+
 
 
 
