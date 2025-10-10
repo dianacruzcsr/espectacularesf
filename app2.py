@@ -22,7 +22,7 @@ def generar_folio():
     """Genera un folio único con formato PROP-AÑO-DIA-MES-SEGUNDOS"""
     ahora = datetime.now()
     # Formato: PROP-AÑO-DIA-MES-SEGUNDOS (ejemplo: PROP-2025-10-07-45812)
-    folio = f"PROP-{ahora.year}-{ahora.day:02d}-{ahora.month:02d}-{ahora.second:02d}"
+    folio = f"PROP-{ahora.year}{ahora.day:02d}{ahora.month:02d}-{ahora.hour:02d}{ahora.minute:02d}{ahora.second:02d}"
     return folio
 
 def incrementar_folio():
@@ -341,8 +341,11 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     
     st.subheader("🗺️ Mapa de Espectaculares")
     mapa = folium.Map(location=[df_filtrado["LATITUD"].mean(), df_filtrado["LONGITUD"].mean()], zoom_start=13)
-    folium.Marker(location=[st.session_state.negocio_lat, st.session_state.negocio_lon], popup=folium.Popup("<b>📍 Negocio</b>", max_width=300), icon=folium.Icon(color="red", icon="star")).add_to(mapa)
-    folium.Circle(location=[st.session_state.negocio_lat, st.session_state.negocio_lon], radius=st.session_state.radio_km * 1000, color="blue", fill=True, fill_opacity=0.1).add_to(mapa)
+    folium.Marker(location=[st.session_state.negocio_lat, st.session_state.negocio_lon], 
+                  popup=folium.Popup("<b>📍 Negocio</b>", max_width=300), icon=folium.Icon(color="red", icon="star")).add_to(mapa)
+    folium.Circle(location=[st.session_state.negocio_lat, 
+                            st.session_state.negocio_lon], 
+                            radius=st.session_state.radio_km * 1000, color="blue", fill=True, fill_opacity=0.1).add_to(mapa)
     cluster = MarkerCluster().add_to(mapa)
     colores_marcadores = ["green", "orange", "purple", "cadetblue", "darkred", "darkgreen", "blue", "pink", "lightgreen", "black"]
     
@@ -366,23 +369,26 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     st.subheader("🎯 Selección de Espectaculares")
     st.write("Selecciona los espectaculares que deseas incluir en las descargas (CSV, Excel y Presentación).")
     
-    opciones_espectaculares = [f"{i+1}. {r['CLAVE']} - {r['TARIFA_PUBLICO']} - {r['DISTANCIA_KM']} km" for i, r in df_filtrado.iterrows()]
+    # Crear opciones con CLAVE como identificador único
+    opciones_espectaculares = {r['CLAVE']: f"{r['CLAVE']} - {r['TARIFA_PUBLICO']} - {r['DISTANCIA_KM']} km" for _, r in df_filtrado.iterrows()}
     
-    seleccionados = st.multiselect(
+    # Usar las claves como valores para el multiselect
+    claves_seleccionadas = st.multiselect(
         "Elige los espectaculares de la lista:", 
-        opciones_espectaculares, 
-        default=st.session_state.espectaculares_seleccionados,
-        placeholder="Selecciona 1 o más espectaculares..."
+        options=list(opciones_espectaculares.keys()),
+        format_func=lambda x: opciones_espectaculares[x],
+        placeholder="Selecciona 1 o más espectaculares...",
+        key='multiselect_espectaculares'
     )
     
     # Actualizar la selección en session_state
-    st.session_state.espectaculares_seleccionados = seleccionados
+    st.session_state.espectaculares_seleccionados = claves_seleccionadas
     
-    if seleccionados:
-        indices_seleccionados = [int(op.split(".")[0]) - 1 for op in seleccionados]
-        df_seleccionados = df_filtrado.iloc[indices_seleccionados]
+    if claves_seleccionadas:
+        # Filtrar el dataframe por las claves seleccionadas
+        df_seleccionados = df_filtrado[df_filtrado['CLAVE'].isin(claves_seleccionadas)]
         
-        st.success(f"✅ **{len(seleccionados)}** espectaculares seleccionados")
+        st.success(f"✅ **{len(claves_seleccionadas)}** espectaculares seleccionados")
         
         # Mostrar tabla de espectaculares seleccionados
         st.subheader("📋 Espectaculares Seleccionados")
@@ -435,7 +441,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
             if st.download_button(
                 label="⬇️ Descargar Resultados (Excel)", 
                 data=output.getvalue(), 
-                file_name=f"{st.session_state.folio_actual}_resultados.xlsx", 
+                file_name=f"{st.session_state.folio_actual}.xlsx", 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key='download_excel'
             ):
@@ -484,6 +490,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     
     else:
         st.warning("⚠️ Por favor, selecciona al menos un espectacular para habilitar las opciones de descarga.")
+
 
 
 
