@@ -225,12 +225,19 @@ def reemplazar_texto_slide(slide, fila, df_filtrado, nombre_negocio=""):
                         else:
                             run.text = run.text.replace(marcador, str(valor))
 
-def procesar_busqueda_individual(df_uploaded, lat_negocio, lon_negocio, radio_km, presupuesto_min, presupuesto_max, tipos_seleccionados, nombre_lugar=""):
+def procesar_busqueda_individual(df_uploaded, lat_negocio, lon_negocio, radio_km, presupuesto_min, presupuesto_max, tipos_seleccionados, proveedores_seleccionados, ciudades_seleccionadas, nombre_lugar=""):
     with st.spinner(f"🔄 Analizando coordenadas para {nombre_lugar if nombre_lugar else 'el lugar'}..."):
         df_copy = df_uploaded.copy()
         
+        # Aplicar filtros por tipo, proveedor y ciudad
         if tipos_seleccionados and "TIPO" in df_copy.columns:
             df_copy = df_copy[df_copy["TIPO"].isin(tipos_seleccionados)]
+        
+        if proveedores_seleccionados and "PROVEEDOR" in df_copy.columns:
+            df_copy = df_copy[df_copy["PROVEEDOR"].isin(proveedores_seleccionados)]
+        
+        if ciudades_seleccionadas and "CIUDAD" in df_copy.columns:
+            df_copy = df_copy[df_copy["CIUDAD"].isin(ciudades_seleccionadas)]
         
         latitudes_decimal = []
         longitudes_decimal = []
@@ -335,6 +342,14 @@ if 'tipos_espectaculares' not in st.session_state:
     st.session_state.tipos_espectaculares = []
 if 'tipos_seleccionados' not in st.session_state:
     st.session_state.tipos_seleccionados = []
+if 'proveedores_disponibles' not in st.session_state:
+    st.session_state.proveedores_disponibles = []
+if 'proveedores_seleccionados' not in st.session_state:
+    st.session_state.proveedores_seleccionados = []
+if 'ciudades_disponibles' not in st.session_state:
+    st.session_state.ciudades_disponibles = []
+if 'ciudades_seleccionados' not in st.session_state:
+    st.session_state.ciudades_seleccionados = []
 if 'consultas_previas' not in st.session_state:
     st.session_state.consultas_previas = []
 if 'lugares_multiples' not in st.session_state:
@@ -363,11 +378,24 @@ if uploaded_file:
     else:
         st.session_state.uploaded_df["TARIFA"] = (st.session_state.uploaded_df["TARIFA PUBLICO"].astype(str).str.replace(r"[^\d.]", "", regex=True).replace("", "0").astype(float))
     
+    # Extraer listas únicas para filtros
     if "TIPO" in st.session_state.uploaded_df.columns:
         tipos_unicos = sorted(st.session_state.uploaded_df["TIPO"].dropna().unique().tolist())
         st.session_state.tipos_espectaculares = tipos_unicos
         if not st.session_state.tipos_seleccionados:
             st.session_state.tipos_seleccionados = tipos_unicos
+    
+    if "PROVEEDOR" in st.session_state.uploaded_df.columns:
+        proveedores_unicos = sorted(st.session_state.uploaded_df["PROVEEDOR"].dropna().unique().tolist())
+        st.session_state.proveedores_disponibles = proveedores_unicos
+        if not st.session_state.proveedores_seleccionados:
+            st.session_state.proveedores_seleccionados = proveedores_unicos
+    
+    if "CIUDAD" in st.session_state.uploaded_df.columns:
+        ciudades_unicas = sorted(st.session_state.uploaded_df["CIUDAD"].dropna().unique().tolist())
+        st.session_state.ciudades_disponibles = ciudades_unicas
+        if not st.session_state.ciudades_seleccionados:
+            st.session_state.ciudades_seleccionados = ciudades_unicas
 
 # 2. INPUTS PARA LA BÚSQUEDA
 st.write("---")
@@ -439,36 +467,30 @@ with col2:
 with col3:
     st.session_state.radio_km = st.slider("📏 Radio de búsqueda (km):", min_value=0.5, max_value=50.0, value=st.session_state.radio_km, step=0.5, key='radio_km_input')
 
-# Filtro por tipos de espectaculares
+# FILTROS POR TIPO, PROVEEDOR Y CIUDAD
 st.write("---")
-st.subheader("🎪 **Selección de Tipos de Espectaculares**")
+st.subheader("🎪 **Filtros de Espectaculares**")
 
+# Filtro por tipos de espectaculares
 if st.session_state.tipos_espectaculares:
+    st.write("**Tipos de Espectaculares:**")
     col_btns1, col_btns2, col_btns3 = st.columns(3)
     
     with col_btns1:
-        if st.button("✅ Seleccionar Todos", key="select_all"):
+        if st.button("✅ Seleccionar Todos Tipos", key="select_all_tipos"):
             st.session_state.tipos_seleccionados = st.session_state.tipos_espectaculares.copy()
             st.rerun()
     
     with col_btns2:
-        if st.button("❌ Deseleccionar Todos", key="deselect_all"):
+        if st.button("❌ Deseleccionar Todos Tipos", key="deselect_all_tipos"):
             st.session_state.tipos_seleccionados = []
             st.rerun()
     
-    with col_btns3:
-        if st.button("🔄 Invertir Selección", key="invert_selection"):
-            if st.session_state.tipos_seleccionados:
-                st.session_state.tipos_seleccionados = [tipo for tipo in st.session_state.tipos_espectaculares if tipo not in st.session_state.tipos_seleccionados]
-            else:
-                st.session_state.tipos_seleccionados = st.session_state.tipos_espectaculares.copy()
-            st.rerun()
-    
     st.session_state.tipos_seleccionados = st.multiselect(
-        "**Selecciona uno o más tipos de espectaculares:**",
+        "**Selecciona tipos de espectaculares:**",
         options=st.session_state.tipos_espectaculares,
         default=st.session_state.tipos_seleccionados,
-        placeholder="Elige los tipos de espectaculares que te interesan...",
+        placeholder="Elige los tipos de espectaculares...",
         key='multiselect_tipos'
     )
     
@@ -478,7 +500,69 @@ if st.session_state.tipos_espectaculares:
         else:
             st.success(f"✅ **{len(st.session_state.tipos_seleccionados)}** tipos seleccionados")
     else:
-        st.info("ℹ️ No hay tipos seleccionados. Se mostrarán todos los espectaculares.")
+        st.info("ℹ️ No hay tipos seleccionados. Se mostrarán todos los tipos.")
+
+# Filtro por proveedores
+if st.session_state.proveedores_disponibles:
+    st.write("**Proveedores:**")
+    col_btns1, col_btns2, col_btns3 = st.columns(3)
+    
+    with col_btns1:
+        if st.button("✅ Seleccionar Todos Proveedores", key="select_all_proveedores"):
+            st.session_state.proveedores_seleccionados = st.session_state.proveedores_disponibles.copy()
+            st.rerun()
+    
+    with col_btns2:
+        if st.button("❌ Deseleccionar Todos Proveedores", key="deselect_all_proveedores"):
+            st.session_state.proveedores_seleccionados = []
+            st.rerun()
+    
+    st.session_state.proveedores_seleccionados = st.multiselect(
+        "**Selecciona proveedores:**",
+        options=st.session_state.proveedores_disponibles,
+        default=st.session_state.proveedores_seleccionados,
+        placeholder="Elige los proveedores...",
+        key='multiselect_proveedores'
+    )
+    
+    if st.session_state.proveedores_seleccionados:
+        if len(st.session_state.proveedores_seleccionados) <= 5:
+            st.success(f"✅ **{len(st.session_state.proveedores_seleccionados)}** proveedores seleccionados: {', '.join(st.session_state.proveedores_seleccionados)}")
+        else:
+            st.success(f"✅ **{len(st.session_state.proveedores_seleccionados)}** proveedores seleccionados")
+    else:
+        st.info("ℹ️ No hay proveedores seleccionados. Se mostrarán todos los proveedores.")
+
+# Filtro por ciudades
+if st.session_state.ciudades_disponibles:
+    st.write("**Ciudades:**")
+    col_btns1, col_btns2, col_btns3 = st.columns(3)
+    
+    with col_btns1:
+        if st.button("✅ Seleccionar Todas Ciudades", key="select_all_ciudades"):
+            st.session_state.ciudades_seleccionados = st.session_state.ciudades_disponibles.copy()
+            st.rerun()
+    
+    with col_btns2:
+        if st.button("❌ Deseleccionar Todas Ciudades", key="deselect_all_ciudades"):
+            st.session_state.ciudades_seleccionados = []
+            st.rerun()
+    
+    st.session_state.ciudades_seleccionados = st.multiselect(
+        "**Selecciona ciudades:**",
+        options=st.session_state.ciudades_disponibles,
+        default=st.session_state.ciudades_seleccionados,
+        placeholder="Elige las ciudades...",
+        key='multiselect_ciudades'
+    )
+    
+    if st.session_state.ciudades_seleccionados:
+        if len(st.session_state.ciudades_seleccionados) <= 5:
+            st.success(f"✅ **{len(st.session_state.ciudades_seleccionados)}** ciudades seleccionadas: {', '.join(st.session_state.ciudades_seleccionados)}")
+        else:
+            st.success(f"✅ **{len(st.session_state.ciudades_seleccionados)}** ciudades seleccionadas")
+    else:
+        st.info("ℹ️ No hay ciudades seleccionadas. Se mostrarán todas las ciudades.")
 
 # 3. FILTRADO Y GENERACIÓN DE RESULTADOS
 if st.button("🚀 **Iniciar Búsqueda Múltiple**") and st.session_state.uploaded_df is not None:
@@ -498,12 +582,14 @@ if st.button("🚀 **Iniciar Búsqueda Múltiple**") and st.session_state.upload
                     st.session_state.presupuesto_min,
                     st.session_state.presupuesto_max,
                     st.session_state.tipos_seleccionados,
+                    st.session_state.proveedores_seleccionados,
+                    st.session_state.ciudades_seleccionados,
                     lugar["nombre"]
                 )
             
             if not df_resultado.empty:
                 todos_resultados.append(df_resultado)
-                resultados_por_lugar[lugar["nombre"]] = df_resultado  # ← AGREGAR ESTO
+                resultados_por_lugar[lugar["nombre"]] = df_resultado
             else:
                 st.warning(f"⚠️ **{lugar['nombre']}**: No se encontraron espectaculares")
         
@@ -513,7 +599,7 @@ if st.button("🚀 **Iniciar Búsqueda Múltiple**") and st.session_state.upload
             
             st.session_state.df_filtrado = st.session_state.busqueda_combinada
             st.session_state.busqueda_realizada = True
-            st.session_state.df_por_lugar = resultados_por_lugar  # ← GUARDAR RESULTADOS POR LUGAR
+            st.session_state.df_por_lugar = resultados_por_lugar
             
             st.session_state.folio_actual = generar_folio()  
 
@@ -530,7 +616,9 @@ if st.button("🚀 **Iniciar Búsqueda Múltiple**") and st.session_state.upload
                 "df_filtrado": st.session_state.busqueda_combinada.copy(),
                 "tipo": "múltiple",
                 "lugares": [lugar["nombre"] for lugar in st.session_state.lugares_multiples],
-                "tipos_seleccionados": st.session_state.tipos_seleccionados.copy() if st.session_state.tipos_seleccionados else []
+                "tipos_seleccionados": st.session_state.tipos_seleccionados.copy() if st.session_state.tipos_seleccionados else [],
+                "proveedores_seleccionados": st.session_state.proveedores_seleccionados.copy() if st.session_state.proveedores_seleccionados else [],
+                "ciudades_seleccionados": st.session_state.ciudades_seleccionados.copy() if st.session_state.ciudades_seleccionados else []
             }
             st.session_state.consultas_previas.append(consulta_actual)
             
@@ -549,11 +637,10 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     st.info(f"🏢 **Negocio:** {st.session_state.nombre_negocio if st.session_state.nombre_negocio else 'No especificado'} | 📋 **Folio:** `{st.session_state.folio_actual}`")
     st.info(f"📍 **Lugares buscados:** {', '.join([lugar['nombre'] for lugar in st.session_state.lugares_multiples])}")
     
-    # DIAGNÓSTICO DE DATOS
+    # DIAGNÓSTICO DE DATOS PARA EL MAPA
     st.write("---")
     st.subheader("🔍 Diagnóstico de Datos para el Mapa")
     
-    # Contar coordenadas válidas
     coordenadas_validas = 0
     coordenadas_invalidas = []
     
@@ -581,14 +668,14 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     
     if coordenadas_invalidas:
         with st.expander("📋 Ver coordenadas problemáticas"):
-            for idx, clave, lat, lon in coordenadas_invalidas[:10]:  # Mostrar solo las primeras 10
+            for idx, clave, lat, lon in coordenadas_invalidas[:10]:
                 st.write(f"**Fila {idx}:** {clave} - Lat: `{lat}`, Lon: `{lon}`")
             if len(coordenadas_invalidas) > 10:
                 st.info(f"... y {len(coordenadas_invalidas) - 10} más")
     
     st.subheader("🗺️ Mapa de Espectaculares (Todos los Lugares)")
     
-    # Calcular centro del mapa de manera más robusta
+    # Calcular centro del mapa
     latitudes_validas = df_filtrado["LATITUD"].dropna()
     longitudes_validas = df_filtrado["LONGITUD"].dropna()
     
@@ -624,21 +711,20 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
             popup=f"Radio de búsqueda: {st.session_state.radio_km} km"
         ).add_to(mapa)
     
-    # Configurar MarkerCluster con parámetros optimizados
+    # Configurar MarkerCluster
     cluster = MarkerCluster(
         name="Espectaculares",
         options={
-            'maxClusterRadius': 50,  # Radio máximo para clustering
-            'disableClusteringAtZoom': 18,  # Desactivar clustering en zoom alto
+            'maxClusterRadius': 50,
+            'disableClusteringAtZoom': 18,
             'showCoverageOnHover': True,
             'zoomToBoundsOnClick': True
         }
     ).add_to(mapa)
     
-    # Agregar marcadores individualmente con mejor manejo de errores
+    # Agregar marcadores individualmente
     for i, r in df_filtrado.iterrows():
         try:
-            # Validación exhaustiva de coordenadas
             lat = r["LATITUD"]
             lon = r["LONGITUD"]
             
@@ -664,6 +750,8 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 <p style="margin: 2px 0;"><b>Tarifa:</b> {r['TARIFA_PUBLICO']}</p>
                 <p style="margin: 2px 0;"><b>Lugar:</b> {lugar_busqueda}</p>
                 <p style="margin: 2px 0;"><b>Tipo:</b> {r.get('TIPO', 'N/A')}</p>
+                <p style="margin: 2px 0;"><b>Proveedor:</b> {r.get('PROVEEDOR', 'N/A')}</p>
+                <p style="margin: 2px 0;"><b>Ciudad:</b> {r.get('CIUDAD', 'N/A')}</p>
                 <p style="margin: 2px 0;"><b>Dirección:</b> {r.get('DIRECCION', 'N/A')}</p>
                 <div style="margin-top: 8px;">
                     <a href='{r['MAPS_']}' target='_blank' style='color: blue; text-decoration: none;'>📍 Google Maps</a><br>
@@ -683,8 +771,6 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
             
         except Exception as e:
             marcadores_fallados += 1
-            # Mostrar errores específicos en modo debug
-            # st.warning(f"Error en marcador {i}: {e}")
     
     # Agregar control de capas
     folium.LayerControl().add_to(mapa)
@@ -696,7 +782,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
     
     st.components.v1.html(folium.Figure().add_child(mapa).render(), height=500)
 
-    # 5. SELECCIÓN DE ESPECTACULARES - SOLUCIÓN DEFINITIVA
+    # 5. SELECCIÓN DE ESPECTACULARES
     st.write("---")
     st.subheader("🎯 Selección de Espectaculares por Lugar")
     st.write("Selecciona los espectaculares que deseas incluir en las descargas.")
@@ -706,7 +792,6 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
         st.session_state.selecciones_por_lugar[lugar_nombre] = nueva_seleccion
         st.session_state.multiselect_actualizado = True
     
-    # VERIFICACIÓN CORREGIDA: Usar st.session_state.df_por_lugar
     if st.session_state.df_por_lugar and len(st.session_state.df_por_lugar) > 0:
         tabs = st.tabs([f"📍 {lugar}" for lugar in st.session_state.df_por_lugar.keys()])
         
@@ -727,7 +812,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                 
                 # Crear opciones con índices únicos
                 opciones_lugar = [
-                    f"{idx}. {row['CLAVE']} - {row['TARIFA_PUBLICO']} - {row['DISTANCIA_KM']} km - {row['TIPO']}" 
+                    f"{idx}. {row['CLAVE']} - {row['TARIFA_PUBLICO']} - {row['DISTANCIA_KM']} km - {row['TIPO']} - {row.get('PROVEEDOR', 'N/A')}" 
                     for idx, (_, row) in enumerate(df_lugar.iterrows())
                 ]
                 
@@ -739,10 +824,10 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                     f"Selecciona espectaculares para {lugar_nombre}:",
                     options=opciones_lugar,
                     default=seleccion_actual,
-                    key=f"multiselect_{lugar_nombre}_{i}"  # Clave única por lugar y pestaña
+                    key=f"multiselect_{lugar_nombre}_{i}"
                 )
                 
-                # ACTUALIZACIÓN INMEDIATA - SIN ESPERAR AL RERUN
+                # ACTUALIZACIÓN INMEDIATA
                 if seleccion_lugar != seleccion_actual:
                     actualizar_seleccion(lugar_nombre, seleccion_lugar)
                     st.rerun()
@@ -756,7 +841,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                     df_seleccionados_lugar = df_lugar.iloc[indices_seleccionados_lugar]
                     
                     # Mostrar tabla
-                    columnas_mostrar = ['CLAVE', 'DIRECCION', 'TARIFA_PUBLICO', 'DISTANCIA_KM', 'TIPO']
+                    columnas_mostrar = ['CLAVE', 'DIRECCION', 'TARIFA_PUBLICO', 'DISTANCIA_KM', 'TIPO', 'PROVEEDOR', 'CIUDAD']
                     st.dataframe(df_seleccionados_lugar[columnas_mostrar])
                     
                     # Agregar a combinación
@@ -820,7 +905,7 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                     incrementar_folio(st.session_state.lugares_multiples)
                     st.success(f"✅ Descarga completada.")
             
-            # 7. GENERAR PRESENTACIÓN - CORREGIDO
+            # 7. GENERAR PRESENTACIÓN
             st.write("---")
             st.subheader("🎓 Generar Presentación")
             
@@ -857,7 +942,6 @@ if not st.session_state.df_filtrado.empty and st.session_state.busqueda_realizad
                             nueva_slide = duplicar_slide(prs, slide_base)
                             reemplazar_texto_slide(nueva_slide, fila.to_dict(), todos_espectaculares, st.session_state.nombre_negocio)
                         
-                        # CORRECCIÓN: empty es un atributo, no un método
                         if not todos_espectaculares.empty:
                             primera_fila = todos_espectaculares.iloc[0]
                             reemplazar_texto_slide(prs.slides[0], primera_fila.to_dict(), todos_espectaculares, st.session_state.nombre_negocio)
@@ -904,6 +988,17 @@ if len(st.session_state.consultas_previas) > 0:
                     st.write(f"**Tipos seleccionados:** {', '.join(consulta['tipos_seleccionados'])}")
                 else:
                     st.write(f"**Tipos seleccionados:** {len(consulta['tipos_seleccionados'])} tipos")
+            if 'proveedores_seleccionados' in consulta and consulta['proveedores_seleccionados']:
+                if len(consulta['proveedores_seleccionados']) <= 5:
+                    st.write(f"**Proveedores seleccionados:** {', '.join(consulta['proveedores_seleccionados'])}")
+                else:
+                    st.write(f"**Proveedores seleccionados:** {len(consulta['proveedores_seleccionados'])} proveedores")
+            if 'ciudades_seleccionados' in consulta and consulta['ciudades_seleccionados']:
+                if len(consulta['ciudades_seleccionados']) <= 5:
+                    st.write(f"**Ciudades seleccionadas:** {', '.join(consulta['ciudades_seleccionados'])}")
+                else:
+                    st.write(f"**Ciudades seleccionadas:** {len(consulta['ciudades_seleccionados'])} ciudades")
+
 
 
 
